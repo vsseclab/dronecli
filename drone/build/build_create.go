@@ -1,0 +1,61 @@
+package build
+
+import (
+	"os"
+	"text/template"
+
+	"github.com/drone/drone-cli/drone/internal"
+	"github.com/drone/funcmap"
+	"github.com/urfave/cli"
+)
+
+var buildCreateCmd = cli.Command{
+	Name:      "create",
+	Usage:     "create a build",
+	ArgsUsage: "<repo/name>",
+	Action:    buildCreate,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "commit",
+			Usage: "source commit",
+		},
+		cli.StringFlag{
+			Name:  "branch",
+			Usage: "source branch",
+		},
+		cli.StringSliceFlag{
+			Name:  "param, p",
+			Usage: "custom parameters to be injected into the job environment. Format: KEY=value",
+		},
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "format output",
+			Value: tmplBuildInfo,
+		},
+	},
+}
+
+func buildCreate(c *cli.Context) (err error) {
+	repo := c.Args().First()
+	owner, name, err := internal.ParseRepo(repo)
+	if err != nil {
+		return err
+	}
+
+	client, err := internal.NewClient(c)
+	if err != nil {
+		return err
+	}
+
+	params := internal.ParseKeyPair(c.StringSlice("param"))
+	build, err := client.BuildCreate(owner, name, c.String("commit"), c.String("branch"), params)
+	if err != nil {
+		return err
+	}
+
+	tmpl, err := template.New("_").Funcs(funcmap.Funcs).Parse(c.String("format"))
+	if err != nil {
+		return err
+	}
+	return tmpl.Execute(os.Stdout, build)
+}
